@@ -167,3 +167,8 @@ PyInstaller builds are OS-specific. This project is being edited in a Linux sand
 - `bootstrap.py`, `setup_model.py`, `download_local_model.py` — Python setup and model downloaders
 - `requirements*.txt` — Python dependencies
 - `tests/` — assistant, setup discovery, memory, model transfers, desktop settings, and plugins
+
+
+## One-file setup download
+
+A self-extracting Python setup script is available at [`downloads/JARVIS-One-File-Setup.py`](downloads/JARVIS-One-File-Setup.py). Run it with Python 3.10+; it unpacks this project and starts the automatic installer. Setup fetches the offline Vosk speech model and the approximately 1.93 GB local chat model by default. Use `--without-chat` to skip the large model or `--no-launch` to install without opening the app.
