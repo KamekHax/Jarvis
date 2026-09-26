@@ -1,0 +1,3 @@
+-r requirements.txt
+-r requirements-chat.txt
+pyinstaller>=6.0,<7

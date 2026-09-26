@@ -1,0 +1,4 @@
+vosk>=0.3.45,<1
+sounddevice>=0.5,<1
+pyttsx3>=2.98,<3
+pynput>=1.7.7,<2
