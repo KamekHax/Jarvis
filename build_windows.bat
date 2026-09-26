@@ -2,10 +2,9 @@
 setlocal
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (
-  echo JARVIS virtual environment not found.
-  echo First run: python installer.py --launch
-  echo The normal setup downloads the local chat model automatically.
-  exit /b 2
+  echo Creating the build environment. This does not download local models.
+  py -3.12 -m venv .venv
+  if errorlevel 1 exit /b 1
 )
 ".venv\Scripts\python.exe" -m pip install -r requirements-build.txt
 if errorlevel 1 exit /b %errorlevel%

@@ -11,6 +11,10 @@ ROOT = Path(__file__).resolve().parent
 
 def bundled_assets() -> list[tuple[Path, str]]:
     assets: list[tuple[Path, str]] = [(ROOT / "config.example.json", ".")]
+    for name in ("LICENSE", "TERMS_OF_USE.md", "CONTRIBUTING.md", "README.md"):
+        policy_file = ROOT / name
+        if policy_file.is_file():
+            assets.append((policy_file, "."))
     skills = ROOT / "skills"
     if skills.is_dir():
         assets.extend((path, "skills") for path in sorted(skills.glob("*_skill.py")))

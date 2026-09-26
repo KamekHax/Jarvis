@@ -19,6 +19,7 @@ models/
 venv/
 build/
 dist/
+artifacts/
 *.spec
 JARVIS-Local.zip
 JARVIS-One-File-Setup.py

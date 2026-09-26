@@ -1,5 +1,7 @@
 # JARVIS Local
 
+**Open source (MIT).** Forks and modifications are permitted under `LICENSE`; keep the required notice and label modified builds honestly. Only maintainer-reviewed addons are included in the official catalog/releases. Read [Terms of Use](TERMS_OF_USE.md) and [Contributing](CONTRIBUTING.md). The MIT license permits redistribution of compliant forks; the project policy asks that forks not be represented as official or as an official "crack".
+
 An offline-first, Python desktop voice assistant inspired by movie-style assistants. Voice Chat is the primary control surface; a separate local chat/history window remains available. Speech recognition uses an on-device Vosk model; open-ended conversation runs in-process through `llama-cpp-python` and a local GGUF model. The HUD includes a reactive core, a draggable overlay, a fullscreen skill tree, theme packs, locally installed system voices, and opt-in app permissions.
 
 > This is a practical local assistant, not movie-grade general AI. It can launch only apps you explicitly allow-list and only after you enable that permission; it does not use a shell or execute generated code. Routine use makes no network requests.
@@ -148,9 +150,15 @@ Microphone audio is processed locally; raw recordings are not saved. Text transc
 
 ## Build a Windows executable
 
-On a Windows build PC, first run the normal setup so the project environment has the dependencies and local models, then run `build_windows.bat`. It produces `dist/JARVIS/JARVIS.exe` and its supporting runtime files. Copy the **whole `dist/JARVIS` folder** to the target Windows PC; Python does not need to be installed or on PATH. The application can still start if a model is absent and offers repair controls in Settings.
+**Easiest:** in the repository's **Actions → Build JARVIS Windows desktop app**, run the workflow (or use the artifact generated after a push to `main`). Download `JARVIS-Windows-Portable`; it includes `JARVIS-Local-Setup.exe` (per-user setup with Start Menu entry and readable license/terms) and `JARVIS-Windows-Portable.zip` (extract and launch `JARVIS/JARVIS.exe`). Both contain the app's Python runtime and dependencies; target PCs do not need Python or a PATH configuration. No model files are baked into CI builds; the app starts without them and lets the user explicitly download local speech/chat models from Settings. Keep the entire extracted app folder together.
 
-PyInstaller builds are OS-specific. This project is being edited in a Linux sandbox, so a native Windows `.exe` cannot be compiled or verified here. Run the supplied `.bat` on Windows to create it. `python build_windows.py --dry-run` lists the resources that would be packaged on any OS.
+To build locally on a Windows build PC, run `build_windows.bat`. It creates a Python 3.12 build environment and compiles the portable bundle; it does not download the large local AI models as part of the build. The app can still start if a model is absent and offers repair controls in Settings.
+
+PyInstaller builds are OS-specific. `python build_windows.py --dry-run` lists the resources that would be packaged on any OS. CI runs the test suite before uploading the app archive.
+
+## Open source, terms, and addon review
+
+JARVIS Local is open source under the MIT License. Users may fork and rework the code as the license allows; retain the MIT notice and do not claim an unofficial fork is the official release. The maintainer reviews and approves addons before they appear in the official catalog or release, while users can separately choose to create and enable local addons. These project guidelines do not override MIT redistribution rights. Read [Terms of Use](TERMS_OF_USE.md) and [Contributing](CONTRIBUTING.md).
 
 ## Project files
 

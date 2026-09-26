@@ -159,6 +159,10 @@ class JarvisDesktop:
         self.search_entry.bind("<Return>", lambda _event: self._search_memory())
         self._button(search_row, "Search", self._search_memory).pack(side="right", ipady=5)
 
+        self._button(sidebar, "About · Open Source (MIT)", self._open_about).pack(
+            fill="x", padx=12, pady=(0, 12), ipady=4
+        )
+
         main = tk.Frame(outer, bg=BG)
         main.pack(side="left", fill="both", expand=True, padx=(16, 0))
 
@@ -246,6 +250,56 @@ class JarvisDesktop:
             activebackground="#1d4059", activeforeground=TEXT,
             relief="flat", bd=0, cursor="hand2", font=("Segoe UI", 9, "bold"), padx=12, pady=6,
         )
+
+    def _open_about(self) -> None:
+        window = tk.Toplevel(self.root)
+        window.title("About JARVIS Local")
+        window.geometry("560x360")
+        window.minsize(460, 320)
+        window.configure(bg=BG)
+        window.transient(self.root)
+        tk.Label(window, text="J.A.R.V.I.S. LOCAL", bg=BG, fg=CYAN,
+                 font=("Segoe UI", 18, "bold")).pack(anchor="w", padx=22, pady=(20, 4))
+        tk.Label(window, text="Open-source desktop assistant · MIT License", bg=BG, fg=TEXT,
+                 font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=22, pady=(0, 14))
+        policy = (
+            "You may fork and modify JARVIS under the MIT License; retain its notice. "
+            "The maintainer reviews addons before they are included in the official catalog or releases. "
+            "Forks and modified builds must not be presented as official or endorsed. "
+            "Project guidance does not override the redistribution rights granted by MIT."
+        )
+        tk.Label(window, text=policy, bg=BG, fg=TEXT, wraplength=510,
+                 justify="left", font=("Segoe UI", 10)).pack(fill="x", padx=22, pady=(0, 14))
+        tk.Label(window, text="Offline: source and policy documents are included with this app. "
+                 "Local addons run with your account's OS permissions.", bg=BG, fg=MUTED,
+                 wraplength=510, justify="left", font=("Segoe UI", 9)).pack(anchor="w", padx=22)
+        controls = tk.Frame(window, bg=BG)
+        controls.pack(fill="x", padx=18, pady=18)
+        for filename, label in (("LICENSE", "MIT License"), ("TERMS_OF_USE.md", "Terms of Use"),
+                                ("CONTRIBUTING.md", "Addon review policy")):
+            self._button(controls, label,
+                         lambda name=filename, title=label: self._open_project_document(name, title)).pack(
+                             side="left", padx=3, ipady=4
+                         )
+
+    def _open_project_document(self, filename: str, title: str) -> None:
+        try:
+            text = asset_path(filename).read_text(encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror(title, f"The bundled document could not be opened: {exc}", parent=self.root)
+            return
+        window = tk.Toplevel(self.root)
+        window.title(f"JARVIS Local · {title}")
+        window.geometry("760x640")
+        window.configure(bg=BG)
+        viewer = tk.Text(window, wrap="word", bg=PANEL, fg=TEXT, insertbackground=TEXT,
+                         relief="flat", padx=18, pady=16, font=("Segoe UI", 10))
+        scroll = ttk.Scrollbar(window, orient="vertical", command=viewer.yview)
+        viewer.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        viewer.pack(side="left", fill="both", expand=True, padx=12, pady=12)
+        viewer.insert("1.0", text)
+        viewer.configure(state="disabled")
 
     def _append_message(self, role: str, content: str) -> None:
         self.transcript.configure(state="normal")
