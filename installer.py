@@ -289,6 +289,12 @@ def install(with_chat: bool = True, skip_speech_model: bool = False,
         return result.returncode
     print("\nJARVIS is ready. Start the desktop app with:")
     print(f"  {python} {ROOT / 'run.py'}")
+    try:
+        from desktop_shortcuts import create_desktop_shortcut
+        shortcut = create_desktop_shortcut(ROOT, python_exe=python)
+        print(f"Created launcher shortcut: {shortcut}")
+    except Exception as exc:
+        print(f"Could not create a desktop shortcut (you can still use the command above): {exc}")
     if launch:
         print("Opening the JARVIS desktop interface…")
         launched = subprocess.run([str(python), str(ROOT / "run.py")], cwd=ROOT, check=False)

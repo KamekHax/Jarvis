@@ -13,6 +13,9 @@ from typing import Any
 
 DEFAULT_PERMISSIONS: dict[str, bool] = {
     "allow_app_launching": False,
+    "allow_internet_search": False,
+    "allow_skill_installation": False,
+    "allow_local_music": False,
     "allow_workspace_writes": False,
     "allow_local_file_learning": False,
     "allow_user_plugins": False,

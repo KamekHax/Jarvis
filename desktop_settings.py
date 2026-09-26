@@ -31,10 +31,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "workspace_dir": "",
     "approved_apps": {},
     "allow_app_launching": False,
+    "allow_internet_search": False,
+    "allow_skill_installation": False,
     "allow_workspace_writes": False,
     "allow_local_file_learning": False,
     "allow_user_plugins": False,
     "allow_external_integrations": False,
+    "allow_local_music": False,
+    "music_folder": "",
+    "browser_search_engine": "Google",
+    "installed_catalog_skills": [],
     "mode": "everyday",
     "overlay_geometry": "380x380+40+40",
 }
@@ -70,9 +76,20 @@ def load_settings(path: Path | None = None) -> dict[str, Any]:
             for name, path in settings["approved_apps"].items()
             if str(name).strip() and str(path).strip()
         }
-    for key in ("allow_app_launching", "allow_workspace_writes", "allow_local_file_learning",
-                "allow_user_plugins", "allow_external_integrations"):
+    for key in ("allow_app_launching", "allow_internet_search", "allow_skill_installation",
+                "allow_workspace_writes", "allow_local_file_learning",
+                "allow_user_plugins", "allow_external_integrations", "allow_local_music"):
         settings[key] = settings.get(key, False) if isinstance(settings.get(key, False), bool) else False
+    if settings.get("browser_search_engine") not in {"Google", "Bing", "DuckDuckGo"}:
+        settings["browser_search_engine"] = "Google"
+    if not isinstance(settings.get("music_folder"), str):
+        settings["music_folder"] = ""
+    if not isinstance(settings.get("installed_catalog_skills"), list):
+        settings["installed_catalog_skills"] = []
+    settings["installed_catalog_skills"] = [
+        item for item in settings["installed_catalog_skills"]
+        if isinstance(item, str) and item.replace("_", "").isalnum()
+    ]
     return settings
 
 

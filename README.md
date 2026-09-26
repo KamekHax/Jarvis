@@ -26,6 +26,7 @@ The installer automatically:
 2. Creates a project-local `.venv` with the selected interpreter, so the runtime does not depend on which Python is first on PATH afterward.
 3. Installs Python packages and downloads the ~40 MB speech model plus the ~1.93 GB local conversation model by default.
 4. Creates app configuration, enables local chat and built-in skills, then launches the desktop interface when `--launch` is supplied.
+5. Creates a per-user app-menu/desktop launcher for later starts (login startup remains a separate opt-in setting).
 
 The first setup requires internet access and roughly 2.5 GB of free disk space for Python packages and models; normal app use works offline. The large chat-model download may take a while depending on your connection. If interrupted, rerun setup and the `.part` download resumes when supported by the host. If it must scan folders, that fallback search is bounded to 45 seconds by default; adjust with `--search-seconds 120`. If no Python 3.10+ installation can be found, install Python 3.10 or newer first—the installer cannot create an interpreter from nothing.
 
@@ -67,6 +68,8 @@ Open **Skills** to enable/disable dynamically discovered capabilities. Built-in 
 - Searchable conversation recall and a local knowledge vault: say **“Learn that my project uses Python”**; later say **“What have you learned?”** or ask about that subject.
 - Local coding help using the bundled on-device LLM. JARVIS does not train or fine-tune itself: it stores only facts/files you explicitly teach it and retrieves them as local prompt context. To save a response, first enable workspace writes and choose a folder in Settings, then say **“Save the last code as parser.py.”** Saves are restricted to that folder and never overwrite existing files; JARVIS does not run the code.
 - Voice-controlled theme and voice changes, an in-process timer with spoken completion alerts, and a permission-gated app launcher.
+- An opt-in web search skill: enable **Allow explicitly requested web searches** and say **“Google the current weather in Oslo.”** Only that query is sent to Bing for short public snippets and to your selected default-browser provider; result pages are not downloaded. If local chat is uncertain, JARVIS asks you to explicitly request a search rather than sending a model-generated query online.
+- A command-installable local music add-on: enable **Allow installing reviewed bundled skills by voice command**, say **“Install skill music,”** select a music folder in Settings, and enable **Allow local music playback**. Playback uses only audio files directly in that folder; it does not stream or fetch tracks. `pygame` is installed during standard setup.
 
 To ingest a local text/source document, first enable **Learn from files I explicitly select**, then say **“Learn from a file.”** Choose one text file in the picker. It stays on the device, is bounded to 200 KB, is stored in local SQLite chunks, and may be retrieved by the local LLM. JARVIS does **not** crawl other folders or silently read files.
 
@@ -116,7 +119,7 @@ The installer opens the GUI with `--launch`. Later, start it from the project fo
 
 Click **Start Voice Chat** for a continuous spoken conversation without repeating the wake word, or use **Start mic** to say **“Jarvis, what time is it?”** Try **“Convert 12 miles to km,” “Set a timer for 5 minutes,” “Learn that my project uses Python,”** or **“What did I tell you about Iceland?”** Typed chat and the separate conversation sidebar remain available; long code is shown in the local chat instead of being read aloud in full. Voice Chat listens for a turn, replies aloud, then listens again until you tap **End Voice Chat**. The microphone stays active in that mode; press the button to stop it.
 
-Under **Settings → Security & permissions**, app launching, workspace writes, selected-file learning, personal Python plugins, and third-party app integrations are separate **off-by-default** switches. To enable an app: turn on app launching, add an executable/launcher by file picker with a voice alias, then say **“Open app Calculator.”** JARVIS launches only that allow-listed path (no arbitrary shell commands). Scripts/documents are refused; remove the app or switch off the permission to revoke access.
+Under **Settings → Security & permissions**, app launching, web search, command-based skill installation, local music, workspace writes, selected-file learning, personal Python plugins, and third-party app integrations are separate **off-by-default** switches. To enable an app: turn on app launching, add an executable/launcher by file picker with a voice alias, then say **“Open app Calculator.”** JARVIS launches only that allow-listed path (no arbitrary shell commands). Scripts/documents are refused; remove the app or switch off the permission to revoke access. Web search only happens when you explicitly name the topic in a search command; local conversation history, memory, and files are never attached. The network permission is for short search-result snippets, while your chosen provider results open in your operating system's default browser.
 
 ## Conversation memory
 
@@ -129,7 +132,7 @@ Under **Settings → Security & permissions**, app launching, workspace writes, 
 
 ## Privacy
 
-Microphone audio is processed locally; raw recordings are not saved. Text transcripts, learned knowledge, permissions, allow-listed app paths, and preferences are stored locally. Speech recognition, TTS, memory, skills, and model inference run on-device. Setup and explicit model-repair actions use the network to install packages or download model files; ordinary assistant use makes no network requests. App launches, user plugins, integration code, and workspace file writes are separately permission-gated. App path names may be stored in the unencrypted local settings file; the memory database is not encrypted.
+Microphone audio is processed locally; raw recordings are not saved. Text transcripts, learned knowledge, permissions, allow-listed app paths, and preferences are stored locally. Speech recognition, TTS, memory, skills, music playback, and model inference run on-device. Setup and explicit model-repair actions use the network to install packages or download model files. Ordinary assistant use makes no network requests; a web request occurs only after a direct search command and with the dedicated setting enabled. Search queries are sent to Bing for bounded snippets and the chosen default-browser provider; no chat history, files, or stored memory is included. App launches, user plugins, integration code, and workspace file writes are separately permission-gated. App path names may be stored in the unencrypted local settings file; the memory database is not encrypted.
 
 ## Troubleshooting
 
@@ -156,6 +159,9 @@ PyInstaller builds are OS-specific. This project is being edited in a Linux sand
 - `jarvis_ui.py` — Tkinter desktop chat, history navigation/search, microphone control
 - `hud.py` — reactive core, draggable overlay, fullscreen command center, dynamic plugin tree
 - `permissions.py` — exact-path approved app launching without shell execution
+- `internet_search.py`, `music_player.py`, `skill_catalog.py` — bounded explicit web lookup, offline folder playback, and integrity-pinned user-installed add-ons
+- `bundled_addons/` — optional modules kept separate from auto-loaded skills until requested
+- `desktop_shortcuts.py` — creates the per-user application-menu launcher after setup
 - `desktop_settings.py`, `hotkeys.py` — persisted preferences, login startup, and keyboard shortcuts
 - `themes.py`, `theme_manager.py`, `voices.py` — local appearance packs and installed speech voice profiles
 - `app_paths.py` — bundled-asset and writable per-user paths for frozen builds
@@ -167,8 +173,3 @@ PyInstaller builds are OS-specific. This project is being edited in a Linux sand
 - `bootstrap.py`, `setup_model.py`, `download_local_model.py` — Python setup and model downloaders
 - `requirements*.txt` — Python dependencies
 - `tests/` — assistant, setup discovery, memory, model transfers, desktop settings, and plugins
-
-
-## One-file setup download
-
-A self-extracting Python setup script is available at [`downloads/JARVIS-One-File-Setup.py`](downloads/JARVIS-One-File-Setup.py). Run it with Python 3.10+; it unpacks this project and starts the automatic installer. Setup fetches the offline Vosk speech model and the approximately 1.93 GB local chat model by default. Use `--without-chat` to skip the large model or `--no-launch` to install without opening the app.

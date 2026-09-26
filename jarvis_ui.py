@@ -22,6 +22,8 @@ from themes import DEFAULT_THEME, get_theme
 from theme_manager import load_themes
 from voices import VOICE_STYLES, discover_voices, find_voice_id
 from permissions import add_approved_app
+from music_player import LocalMusicPlayer
+from skill_catalog import install_skill as install_catalog_skill
 
 BG = "#0b1018"
 PANEL = "#111a26"
@@ -83,6 +85,9 @@ class JarvisDesktop:
             "set_voice": self._set_voice_from_voice,
             "set_timer": self._set_timer,
             "cancel_timers": self._cancel_timers,
+            "search_web": self.assistant._search_web,
+            "install_skill": self._install_catalog_skill,
+            "music_player": LocalMusicPlayer(self.desktop_settings.get("music_folder", "")),
         }
         self.timers: dict[str, str] = {}
         self.timer_serial = 0
@@ -694,6 +699,50 @@ class JarvisDesktop:
             self.desktop_settings["workspace_dir"] = str(Path(folder).resolve())
             save_settings(self.desktop_settings)
 
+    def _choose_music_folder(self, variable: tk.StringVar | None = None) -> None:
+        folder = filedialog.askdirectory(title="Choose the local folder containing your music")
+        if not folder:
+            return
+        resolved = str(Path(folder).resolve())
+        if variable is not None:
+            variable.set(resolved)
+        self.desktop_settings["music_folder"] = resolved
+        player = self.assistant.local_actions.get("music_player")
+        if player:
+            player.set_folder(resolved)
+        save_settings(self.desktop_settings)
+
+    def _install_catalog_skill(self, name: str) -> str:
+        """Install a hash-pinned bundled addon; this function does no Tk calls on the worker."""
+        message, installed_path = install_catalog_skill(name)
+        if installed_path is None:
+            return message
+        from skill_catalog import normalize_name
+        canonical = normalize_name(name)
+        if canonical is None:
+            return message
+        installed = set(self.desktop_settings.get("installed_catalog_skills", []))
+        installed.add(canonical)
+        self.desktop_settings["installed_catalog_skills"] = sorted(installed)
+        save_settings(self.desktop_settings)
+        self.assistant.refresh_user_skills()
+        if canonical in self.assistant.skills.skills:
+            self.assistant.skills.set_enabled(canonical, True)
+            self.config["enabled_skills"] = sorted(self.assistant.skills.enabled)
+            config_path = ROOT / "config.json"
+            temporary = config_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(self.config, indent=2) + "\n", encoding="utf-8")
+            os.replace(temporary, config_path)
+        if hasattr(self, "hud"):
+            self.root.after(0, self._refresh_plugin_tree)
+        return message.replace("ready to enable in Skills", "installed and enabled")
+
+    def _refresh_plugin_tree(self) -> None:
+        if not hasattr(self, "hud"):
+            return
+        self.hud.skills = self.assistant.skills
+        self.hud.refresh_skills()
+
     def _add_approved_app(self, approved_apps: dict[str, str] | None = None,
                           app_list: tk.Listbox | None = None) -> None:
         if platform.system() == "Darwin":
@@ -814,10 +863,13 @@ class JarvisDesktop:
         selected_voice = tk.StringVar(value=active_voice_name)
         permission_values = {
             key: tk.BooleanVar(value=bool(self.desktop_settings.get(key, False)))
-            for key in ("allow_app_launching", "allow_workspace_writes", "allow_local_file_learning",
+            for key in ("allow_app_launching", "allow_internet_search", "allow_skill_installation",
+                        "allow_local_music", "allow_workspace_writes", "allow_local_file_learning",
                         "allow_user_plugins", "allow_external_integrations")
         }
         workspace_value = tk.StringVar(value=str(self.desktop_settings.get("workspace_dir", "")))
+        music_folder_value = tk.StringVar(value=str(self.desktop_settings.get("music_folder", "")))
+        browser_engine_value = tk.StringVar(value=str(self.desktop_settings.get("browser_search_engine", "Google")))
 
         def section(title: str) -> None:
             tk.Label(body, text=title.upper(), bg=PANEL, fg=CYAN,
@@ -866,6 +918,26 @@ class JarvisDesktop:
                  bg=PANEL, fg="#ffc46b", font=("Segoe UI", 8), wraplength=545,
                  justify="left").pack(anchor="w", padx=15, pady=(0, 5))
         self._setting_check(body, "Allow launching approved apps", permission_values["allow_app_launching"])
+        self._setting_check(body, "Allow explicitly requested web searches (query sent to search provider)",
+                            permission_values["allow_internet_search"])
+        browser_row = tk.Frame(body, bg=PANEL); browser_row.pack(fill="x", padx=14, pady=3)
+        tk.Label(browser_row, text="Open search in default browser", bg=PANEL, fg=TEXT,
+                 font=("Segoe UI", 9)).pack(side="left")
+        ttk.Combobox(browser_row, textvariable=browser_engine_value,
+                     values=("Google", "Bing", "DuckDuckGo"), state="readonly", width=18).pack(side="right")
+        tk.Label(body, text="The app retrieves short Bing result snippets; it never fetches full pages. Only the explicit query is sent. Personal-file, chat-history, and sensitive details are not attached.",
+                 bg=PANEL, fg=MUTED, font=("Segoe UI", 8), wraplength=545, justify="left").pack(anchor="w", padx=15, pady=(0, 4))
+        self._setting_check(body, "Allow installing reviewed bundled skills by voice command",
+                            permission_values["allow_skill_installation"])
+        self._setting_check(body, "Allow local music playback from my chosen folder",
+                            permission_values["allow_local_music"])
+        music_row = tk.Frame(body, bg=PANEL); music_row.pack(fill="x", padx=14, pady=4)
+        tk.Label(music_row, text="Local music folder", bg=PANEL, fg=TEXT,
+                 font=("Segoe UI", 9)).pack(side="left")
+        tk.Entry(music_row, textvariable=music_folder_value, bg=BG, fg=TEXT, insertbackground=TEXT,
+                 relief="flat", width=35).pack(side="left", padx=8, ipady=4, fill="x", expand=True)
+        tk.Button(music_row, text="Choose…", command=lambda: self._choose_music_folder(music_folder_value),
+                  bg=PANEL_2, fg=TEXT, relief="flat", padx=9, pady=4).pack(side="right")
         self._setting_check(body, "Allow code writes to chosen workspace", permission_values["allow_workspace_writes"])
         self._setting_check(body, "Learn from files I explicitly select", permission_values["allow_local_file_learning"])
         self._setting_check(body, "Allow user-installed Python skill plugins", permission_values["allow_user_plugins"])
@@ -940,7 +1012,9 @@ class JarvisDesktop:
                 "always_on_top": topmost_value.get(), "click_through": click_value.get(),
                 "launch_on_startup": startup_value.get(),
                 "theme": selected_theme.get(), "voice_style": voice_styles.get(),
+                "browser_search_engine": browser_engine_value.get(),
                 "voice_id": selected_voice_id, "workspace_dir": workspace_value.get().strip(),
+                "music_folder": music_folder_value.get().strip(),
                 "approved_apps": approved_apps,
                 **{key: variable.get() for key, variable in permission_values.items()},
                 **{key: entry.get().strip().lower() for key, entry in shortcuts.items()},
@@ -951,6 +1025,12 @@ class JarvisDesktop:
             self.speech.set_voice(selected_voice_id, voice_styles.get())
             self.hud.apply_settings(self.desktop_settings)
             self.assistant.desktop_settings = self.desktop_settings
+            player = self.assistant.local_actions.get("music_player")
+            if player:
+                try:
+                    player.set_folder(self.desktop_settings.get("music_folder", ""))
+                except (OSError, RuntimeError, ValueError):
+                    messagebox.showwarning("Music folder", "Choose an existing local music folder or clear this field.", parent=window)
             if (old_user_plugins != permission_values["allow_user_plugins"].get()
                     or old_integrations != permission_values["allow_external_integrations"].get()):
                 self.assistant.refresh_user_skills()
@@ -1147,6 +1227,9 @@ class JarvisDesktop:
     def _close(self) -> None:
         self.listen_stop.set()
         self._cancel_timers_ui()
+        player = self.assistant.local_actions.get("music_player")
+        if player:
+            player.close()
         try:
             self.desktop_settings["overlay_geometry"] = (
                 self.hud.overlay.geometry() if self.hud.overlay and self.hud.overlay.winfo_exists()

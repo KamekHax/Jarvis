@@ -6,6 +6,7 @@ Skills run in-process and have no implicit network access or external permission
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +27,8 @@ class Skill:
 
 class SkillManager:
     def __init__(self, directory: Path | list[Path], enabled: list[str] | None = None,
-                 allow_integrations: bool = False) -> None:
+                 allow_integrations: bool = False,
+                 trusted_hashes: dict[str, str] | None = None) -> None:
         if isinstance(directory, (str, Path)):
             self.directories = [Path(directory)]
         else:
@@ -41,6 +43,7 @@ class SkillManager:
         self.directories = unique
         self.enabled = set(enabled or [])
         self.allow_integrations = bool(allow_integrations)
+        self.trusted_hashes = dict(trusted_hashes or {})
         self.skills: dict[str, Skill] = {}
         self.load_errors: list[str] = []
         self._loading_external = False
@@ -69,6 +72,11 @@ class SkillManager:
             if self.allow_integrations:
                 files.extend(sorted(directory.glob("*_integration.py")))
             for file in files:
+                if directory.name == "installed_skills":
+                    expected = self.trusted_hashes.get(file.name)
+                    if not expected or hashlib.sha256(file.read_bytes()).hexdigest() != expected:
+                        self.load_errors.append(f"{file.name}: missing or invalid bundled-addon integrity pin; skipped")
+                        continue
                 module_name = f"jarvis_skill_{file.stem}_{abs(hash(str(file.resolve())))}"
                 self._loading_external = file.name.endswith("_integration.py")
                 try:
@@ -131,6 +139,12 @@ class SkillManager:
                 if missing:
                     if name == "app_control":
                         return "App launching is blocked. Enable ‘Allow launching approved apps’ in Security & permissions."
+                    if "allow_internet_search" in missing:
+                        return "Online search is off. Enable ‘Allow explicitly requested web searches’ in Settings, then ask again. I did not send this query anywhere."
+                    if "allow_skill_installation" in missing:
+                        return "Skill installation is disabled. Enable ‘Allow installing reviewed bundled skills by voice command’ first; I did not install anything."
+                    if "allow_local_music" in missing:
+                        return "Local music playback is disabled. Enable it in Settings and choose a folder first; no files were played."
                     return f"The {name.replace('_', ' ')} addon needs permission(s) that are currently disabled: {', '.join(missing)}. Review Security & permissions."
                 answer = skill.handler(text, shared)
                 if answer is not None:

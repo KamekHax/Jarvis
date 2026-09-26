@@ -20,6 +20,16 @@ class DesktopSettingsTests(unittest.TestCase):
             self.assertEqual(settings["opacity"], 0.45)
             self.assertEqual(settings["animation_performance"], "medium")
 
+    def test_web_and_local_music_settings_are_sanitized(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "settings.json"
+            path.write_text('{"browser_search_engine":"invalid","music_folder":5,"installed_catalog_skills":"music"}',
+                            encoding="utf-8")
+            settings = load_settings(path)
+            self.assertEqual(settings["browser_search_engine"], "Google")
+            self.assertEqual(settings["music_folder"], "")
+            self.assertEqual(settings["installed_catalog_skills"], [])
+
     def test_shortcut_format(self):
         self.assertEqual(pynput_combo("ctrl+alt+o"), "<ctrl>+<alt>+o")
         self.assertEqual(pynput_combo("alt+f10"), "<alt>+f10")

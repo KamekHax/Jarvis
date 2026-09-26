@@ -14,6 +14,9 @@ def bundled_assets() -> list[tuple[Path, str]]:
     skills = ROOT / "skills"
     if skills.is_dir():
         assets.extend((path, "skills") for path in sorted(skills.glob("*_skill.py")))
+    addons = ROOT / "bundled_addons"
+    if addons.is_dir():
+        assets.extend((path, "bundled_addons") for path in sorted(addons.glob("*_skill.py")))
     models = ROOT / "models"
     if models.is_dir():
         for model in sorted(models.iterdir()):
@@ -53,7 +56,7 @@ def main() -> int:
         "--specpath", str(ROOT / "build"),
         "--collect-all", "vosk", "--collect-all", "sounddevice",
         "--collect-all", "pyttsx3", "--collect-all", "pynput",
-        "--collect-all", "llama_cpp",
+        "--collect-all", "llama_cpp", "--collect-all", "pygame",
         "--hidden-import", "_tkinter", "--hidden-import", "jarvis_ui",
         "--hidden-import", "skill_manager", "--hidden-import", "memory",
         "--hidden-import", "desktop_settings", "--hidden-import", "hud",
@@ -61,6 +64,8 @@ def main() -> int:
         "--hidden-import", "themes", "--hidden-import", "theme_manager",
         "--hidden-import", "voices", "--hidden-import", "setup_model",
         "--hidden-import", "download_local_model",
+        "--hidden-import", "internet_search", "--hidden-import", "music_player",
+        "--hidden-import", "skill_catalog", "--hidden-import", "desktop_shortcuts",
     ]
     separator = ";"  # PyInstaller --add-data delimiter on Windows.
     for source, destination in assets:

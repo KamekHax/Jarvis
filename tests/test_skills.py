@@ -20,7 +20,8 @@ class SkillTests(unittest.TestCase):
     def test_builtin_addons_load(self):
         names = {skill["name"] for skill in self.manager.list_skills()}
         self.assertEqual(names, {"time", "calculator", "memory", "skills_help", "learning",
-                                 "coding", "theme_voice", "app_control", "conversion", "timer"})
+                                 "coding", "theme_voice", "app_control", "conversion", "timer",
+                                 "internet_search", "catalog"})
         self.assertFalse(self.manager.load_errors)
 
     def test_calculator_arithmetic(self):
