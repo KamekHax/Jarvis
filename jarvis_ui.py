@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import platform
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -24,6 +25,8 @@ from voices import VOICE_STYLES, discover_voices, find_voice_id
 from permissions import add_approved_app
 from music_player import LocalMusicPlayer
 from skill_catalog import install_skill as install_catalog_skill
+from voicepacks import (VOICE_CHOICES, VOICE_LABELS, configure_voice_data, download_voice_pack,
+                        ensure_voice_runtime, is_voice_pack_installed, voice_pack_paths)
 
 BG = "#0b1018"
 PANEL = "#111a26"
@@ -56,6 +59,19 @@ class JarvisDesktop:
 
         self.config = load_config()
         self.memory = MemoryStore(user_data_root() / "data" / "jarvis_memory.sqlite3")
+        self.voice_pack_dir = user_data_root() / "models" / "kokoro"
+        self.voice_runtime_dir = user_data_root() / "models" / "kokoro-runtime"
+        if self.voice_runtime_dir.is_dir() and str(self.voice_runtime_dir) not in sys.path:
+            sys.path.insert(0, str(self.voice_runtime_dir))
+        voice_runtime_ready = False
+        if self.voice_runtime_dir.is_dir():
+            try:
+                voice_runtime_ready = configure_voice_data(self.voice_runtime_dir)
+            except Exception as exc:
+                print(f"[optional local voice resources unavailable: {exc}]", file=sys.stderr)
+        self.voice_runtime_ready = voice_runtime_ready
+        neural_model_path, neural_voices_path = voice_pack_paths(self.voice_pack_dir)
+        voice_pack_ready = is_voice_pack_installed(self.voice_pack_dir) and voice_runtime_ready
         self.sessions = self.memory.list_sessions()
         self.current_session_id = self.sessions[0]["id"]
         self.chat: LocalChat | None = None
@@ -73,6 +89,10 @@ class JarvisDesktop:
             on_speech_state=lambda active: self.root.after(0, self._set_speaking, active),
             voice_id=str(self.desktop_settings.get("voice_id", "")),
             voice_style=str(self.desktop_settings.get("voice_style", "Balanced")),
+            neural_model_path=neural_model_path,
+            neural_voices_path=neural_voices_path,
+            neural_voice_id=(str(self.desktop_settings.get("neural_voice_id", ""))
+                             if voice_pack_ready else ""),
         )
         self.speech = speech
         self.installed_voices = discover_voices(speech.engine) if speech.engine else []
@@ -276,7 +296,8 @@ class JarvisDesktop:
         controls = tk.Frame(window, bg=BG)
         controls.pack(fill="x", padx=18, pady=18)
         for filename, label in (("LICENSE", "MIT License"), ("TERMS_OF_USE.md", "Terms of Use"),
-                                ("CONTRIBUTING.md", "Addon review policy")):
+                                ("CONTRIBUTING.md", "Addon review policy"),
+                                ("THIRD_PARTY_NOTICES.md", "Third-party notices")):
             self._button(controls, label,
                          lambda name=filename, title=label: self._open_project_document(name, title)).pack(
                              side="left", padx=3, ipady=4
@@ -712,6 +733,8 @@ class JarvisDesktop:
     def _set_voice_from_voice(self, name: str) -> str:
         styles = {profile.casefold(): profile for profile in VOICE_STYLES}
         styles.update({voice["name"].casefold(): voice["name"] for voice in self.installed_voices})
+        if is_voice_pack_installed(self.voice_pack_dir) and self.voice_runtime_ready:
+            styles.update({label.casefold(): f"Neural · {label}" for label in VOICE_CHOICES})
         match = styles.get(name.casefold())
         if not match:
             return "I couldn't find that installed voice. Available styles and local voices: " + ", ".join(styles.values())
@@ -719,11 +742,20 @@ class JarvisDesktop:
         return f"Switching to the local {match} voice profile."
 
     def _apply_voice_name(self, name: str) -> None:
+        neural_voice_id = next(
+            (voice_id for label, (voice_id, _lang) in VOICE_CHOICES.items()
+             if name == f"Neural · {label}"), ""
+        )
         profile = name if name in VOICE_STYLES else str(self.desktop_settings.get("voice_style", "Balanced"))
         voice = next((item for item in self.installed_voices if item["name"] == name), None)
         self.desktop_settings["voice_style"] = profile
         self.desktop_settings["voice_id"] = voice["id"] if voice else ""
+        self.desktop_settings["neural_voice_id"] = neural_voice_id or str(
+            self.desktop_settings.get("neural_voice_id", "") if name in VOICE_STYLES else ""
+        )
         self.speech.set_voice(self.desktop_settings["voice_id"], profile)
+        if neural_voice_id or name not in VOICE_STYLES:
+            self.speech.set_neural_voice(neural_voice_id)
         save_settings(self.desktop_settings)
         self.status.configure(text=f"●  LOCAL VOICE: {name.upper()}", fg=GREEN)
 
@@ -914,6 +946,11 @@ class JarvisDesktop:
         active_voice_id = self.desktop_settings.get("voice_id", "")
         active_voice_name = next((item["name"] for item in self.installed_voices
                                   if item["id"] == active_voice_id), "System default")
+        saved_neural_id = str(self.desktop_settings.get("neural_voice_id", ""))
+        if is_voice_pack_installed(self.voice_pack_dir) and self.voice_runtime_ready:
+            voice_options.extend(f"Neural · {label}" for label in VOICE_CHOICES)
+            if saved_neural_id in VOICE_LABELS:
+                active_voice_name = f"Neural · {VOICE_LABELS[saved_neural_id]}"
         selected_voice = tk.StringVar(value=active_voice_name)
         permission_values = {
             key: tk.BooleanVar(value=bool(self.desktop_settings.get(key, False)))
@@ -959,8 +996,21 @@ class JarvisDesktop:
         voice_row = tk.Frame(body, bg=PANEL); voice_row.pack(fill="x", padx=14, pady=3)
         tk.Label(voice_row, text="Installed local voice", bg=PANEL, fg=TEXT,
                  font=("Segoe UI", 9)).pack(side="left")
-        ttk.Combobox(voice_row, textvariable=selected_voice, values=voice_options,
-                     state="readonly", width=26).pack(side="right")
+        voice_box = ttk.Combobox(voice_row, textvariable=selected_voice, values=voice_options,
+                                 state="readonly", width=26)
+        voice_box.pack(side="right")
+        voice_files_ready = is_voice_pack_installed(self.voice_pack_dir)
+        voice_state = ("Ready · 11 included choices" if voice_files_ready and self.voice_runtime_ready
+                       else "Files present · runtime/data incomplete" if voice_files_ready
+                       else "Not installed · download ~146 MB")
+        self._model_row(body, "Enhanced local neural voices", voice_state,
+                        lambda: self._download_voice_pack(voice_box))
+        tk.Label(body, text="Install downloads ~146 MB of model files from Hugging Face, runtime packages from PyPI, "
+                 "and small English tokenizer resources from NLTK data. "
+                 "This starts only when you press Install. Speech is synthesized on this PC; spoken text is not uploaded. "
+                 "See Third-party notices.",
+                 bg=PANEL, fg=MUTED, font=("Segoe UI", 8), wraplength=545,
+                 justify="left").pack(anchor="w", padx=15, pady=(0, 4))
         profile_row = tk.Frame(body, bg=PANEL); profile_row.pack(fill="x", padx=14, pady=3)
         tk.Label(profile_row, text="Speaking style", bg=PANEL, fg=TEXT,
                  font=("Segoe UI", 9)).pack(side="left")
@@ -1058,7 +1108,12 @@ class JarvisDesktop:
             old_startup = bool(self.desktop_settings.get("launch_on_startup", False))
             old_user_plugins = bool(self.desktop_settings.get("allow_user_plugins", False))
             old_integrations = bool(self.desktop_settings.get("allow_external_integrations", False))
-            selected_voice_id = find_voice_id(self.installed_voices, selected_voice.get())
+            selected_voice_name = selected_voice.get()
+            selected_voice_id = find_voice_id(self.installed_voices, selected_voice_name)
+            selected_neural_voice = next(
+                (voice_id for label, (voice_id, _lang) in VOICE_CHOICES.items()
+                 if selected_voice_name == f"Neural · {label}"), ""
+            )
             self.desktop_settings.update({
                 "scale": scale_value.get(), "opacity": opacity_value.get(),
                 "animation_performance": performance_value.get(),
@@ -1068,6 +1123,7 @@ class JarvisDesktop:
                 "theme": selected_theme.get(), "voice_style": voice_styles.get(),
                 "browser_search_engine": browser_engine_value.get(),
                 "voice_id": selected_voice_id, "workspace_dir": workspace_value.get().strip(),
+                "neural_voice_id": selected_neural_voice,
                 "music_folder": music_folder_value.get().strip(),
                 "approved_apps": approved_apps,
                 **{key: variable.get() for key, variable in permission_values.items()},
@@ -1077,6 +1133,7 @@ class JarvisDesktop:
             self._apply_ui_scale()
             self._apply_theme_name(selected_theme.get())
             self.speech.set_voice(selected_voice_id, voice_styles.get())
+            self.speech.set_neural_voice(selected_neural_voice)
             self.hud.apply_settings(self.desktop_settings)
             self.assistant.desktop_settings = self.desktop_settings
             player = self.assistant.local_actions.get("music_player")
@@ -1147,6 +1204,54 @@ class JarvisDesktop:
 
     def _download_chat_model(self) -> None:
         self._download_model_task("chat", "Downloading local AI model (~1.93 GB)…")
+
+    def _download_voice_pack(self, selector: ttk.Combobox) -> None:
+        if getattr(self, "_voice_download_in_progress", False):
+            return
+        self._voice_download_in_progress = True
+        self.status.configure(text="●  DOWNLOADING LOCAL VOICE PACK", fg=CYAN)
+
+        def work() -> None:
+            error = None
+            try:
+                from voicepacks import download_voice_pack, ensure_voice_runtime
+                download_voice_pack(
+                    self.voice_pack_dir,
+                    progress=lambda text: self.root.after(0, self._set_status, text, CYAN),
+                )
+                self.root.after(0, self._set_status, "Installing local voice runtime…", CYAN)
+                ensure_voice_runtime(self.voice_runtime_dir)
+                if not configure_voice_data(self.voice_runtime_dir):
+                    raise RuntimeError("The voice runtime or required English language data is incomplete.")
+            except Exception as exc:
+                error = str(exc)
+            self.root.after(0, self._voice_pack_finished, selector, error)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _voice_pack_finished(self, selector: ttk.Combobox, error: str | None) -> None:
+        self._voice_download_in_progress = False
+        if error:
+            self.voice_runtime_ready = False
+            self.status.configure(text="●  VOICE PACK INSTALL FAILED", fg="#ff9c8f")
+            messagebox.showerror("Local voice setup failed", error)
+            return
+        self.voice_runtime_ready = True
+        try:
+            values = ["System default", *(item["name"] for item in self.installed_voices)]
+            values.extend(f"Neural · {label}" for label in VOICE_CHOICES)
+            selector.configure(values=values)
+            selected_id = str(self.desktop_settings.get("neural_voice_id", "")) or "af"
+            label = VOICE_LABELS.get(selected_id, "American · Default")
+            selector.set(f"Neural · {label}")
+        except tk.TclError:
+            pass  # Settings may have been closed while the background download completed.
+        self.status.configure(text="●  LOCAL VOICES READY", fg=GREEN)
+        messagebox.showinfo(
+            "Local voices ready",
+            "The neural voice pack is installed. Choose a ‘Neural · …’ voice in Settings and save. "
+            "Speech is generated locally; no text is sent to the voice provider.",
+        )
 
     def _download_model_task(self, kind: str, label: str) -> None:
         self.status.configure(text=f"●  {label.upper()}", fg=CYAN)

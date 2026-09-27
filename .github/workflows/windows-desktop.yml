@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '!.github/workflows/windows-desktop.yml'
+      - '.gitattributes'
       - '**.py'
       - '*.txt'
       - 'skills/**'
@@ -14,6 +15,7 @@ on:
       - 'LICENSE'
       - 'TERMS_OF_USE.md'
       - 'CONTRIBUTING.md'
+      - 'THIRD_PARTY_NOTICES.md'
       - 'installer_windows.iss'
       - 'build_windows.bat'
       - '.github/workflows/windows-desktop.yml'

@@ -84,6 +84,8 @@ def load_settings(path: Path | None = None) -> dict[str, Any]:
         settings["browser_search_engine"] = "Google"
     if not isinstance(settings.get("music_folder"), str):
         settings["music_folder"] = ""
+    if not isinstance(settings.get("neural_voice_id"), str):
+        settings["neural_voice_id"] = ""
     if not isinstance(settings.get("installed_catalog_skills"), list):
         settings["installed_catalog_skills"] = []
     settings["installed_catalog_skills"] = [
@@ -106,7 +108,7 @@ def _startup_target() -> tuple[str, Path]:
     if system == "Windows":
         return system, Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / "Microsoft/Windows/Start Menu/Programs/Startup/JARVIS-Local.cmd"
     if system == "Darwin":
-        return system, Path.home() / "Library/LaunchAgents/im.manus.jarvis-local.plist"
+        return system, Path.home() / "Library/LaunchAgents/com.jarvis.local-assistant.plist"
     return system, Path.home() / ".config/autostart/jarvis-local.desktop"
 
 
@@ -136,7 +138,7 @@ def set_startup_enabled(enabled: bool, project: Path = ROOT) -> None:
         target.write_text(content, encoding="utf-8")
     elif system == "Darwin":
         target.write_bytes(plistlib.dumps({
-            "Label": "im.manus.jarvis-local",
+            "Label": "com.jarvis.local-assistant",
             "ProgramArguments": command,
             "RunAtLoad": True,
             "KeepAlive": False,

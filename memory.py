@@ -4,8 +4,10 @@ from __future__ import annotations
 import re
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
 
 STOP_WORDS = {
@@ -35,11 +37,16 @@ class MemoryStore:
         if not self.list_sessions():
             self.create_session()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.db_path, timeout=15)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as db:

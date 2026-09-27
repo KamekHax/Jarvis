@@ -18,12 +18,13 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(diagnostics, [])
 
     def test_fallback_search_finds_python_outside_path(self):
-        hidden = Path("/unusual/apps/python/bin/python3")
+        hidden = (Path("D:/unusual/apps/python/bin/python.exe") if sys.platform == "win32"
+                  else Path("/unusual/apps/python/bin/python3"))
         with patch.object(installer, "_quick_candidates", return_value=[]), \
              patch.object(installer, "_deep_candidates", return_value=[hidden]), \
              patch.object(installer, "_version_at", return_value=(3, 12, 3)):
             found, _diagnostics = installer.discover_python(search_seconds=1)
-        self.assertEqual(found, hidden.resolve())
+        self.assertEqual(found, hidden)
 
     def test_old_python_is_rejected(self):
         with patch.object(installer, "_quick_candidates", return_value=[Path("/old/python")]), \

@@ -24,7 +24,7 @@ This is a project conduct and branding policy, **not a new restriction on the re
 
 ## Local operation, permissions, and network use
 
-JARVIS Local is designed to run on the user's computer. Speech recognition, local model inference, memory, and local playback are intended to remain on-device. Initial setup or an explicitly requested model repair may download packages or model files. Web search is off by default and should be used only after the user enables its permission and issues an explicit search command; only the search query is sent to the configured search services. Conversation memory and local files are not attached to web searches.
+JARVIS Local is designed to run on the user's computer. Speech recognition, local model inference, memory, and local playback are intended to remain on-device. Initial setup or an explicitly requested model repair may download packages or model files. Optional neural voice installation downloads the stated model files, runtime packages, and small English tokenizer-language resources only after the user presses the install control; after installation, voice synthesis runs locally. See `THIRD_PARTY_NOTICES.md` for upstream sources and license references. Web search is off by default and should be used only after the user enables its permission and issues an explicit search command; only the search query is sent to the configured search services. Conversation memory and local files are not attached to web searches.
 
 Permission switches are application-level controls, not an operating-system sandbox. Plugins and enabled local integrations run with the current user's process privileges. Users are responsible for choosing what code to run and what access to grant.
 

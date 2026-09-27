@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parent
 
 def bundled_assets() -> list[tuple[Path, str]]:
     assets: list[tuple[Path, str]] = [(ROOT / "config.example.json", ".")]
-    for name in ("LICENSE", "TERMS_OF_USE.md", "CONTRIBUTING.md", "README.md"):
+    for name in ("LICENSE", "TERMS_OF_USE.md", "CONTRIBUTING.md",
+                 "THIRD_PARTY_NOTICES.md", "README.md"):
         policy_file = ROOT / name
         if policy_file.is_file():
             assets.append((policy_file, "."))
@@ -61,6 +62,8 @@ def main() -> int:
         "--collect-all", "vosk", "--collect-all", "sounddevice",
         "--collect-all", "pyttsx3", "--collect-all", "pynput",
         "--collect-all", "llama_cpp", "--collect-all", "pygame",
+        "--collect-all", "onnxruntime", "--collect-all", "ttstokenizer",
+        "--collect-all", "nltk", "--collect-all", "anyascii", "--collect-all", "inflect",
         "--hidden-import", "_tkinter", "--hidden-import", "jarvis_ui",
         "--hidden-import", "skill_manager", "--hidden-import", "memory",
         "--hidden-import", "desktop_settings", "--hidden-import", "hud",
@@ -69,6 +72,7 @@ def main() -> int:
         "--hidden-import", "voices", "--hidden-import", "setup_model",
         "--hidden-import", "download_local_model",
         "--hidden-import", "internet_search", "--hidden-import", "music_player",
+        "--hidden-import", "voicepacks", "--hidden-import", "onnxruntime",
         "--hidden-import", "skill_catalog", "--hidden-import", "desktop_shortcuts",
     ]
     separator = ";"  # PyInstaller --add-data delimiter on Windows.

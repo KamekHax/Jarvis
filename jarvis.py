@@ -69,29 +69,38 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
 class SpeechOutput:
     def __init__(self, enabled: bool = True, on_speak: Callable[[str], None] | None = None,
                  on_speech_state: Callable[[bool], None] | None = None,
-                 voice_id: str = "", voice_style: str = "Balanced") -> None:
+                 voice_id: str = "", voice_style: str = "Balanced",
+                 neural_model_path: Path | None = None, neural_voices_path: Path | None = None,
+                 neural_voice_id: str = "") -> None:
         self.enabled = enabled
         self.engine = None
         self.on_speak = on_speak
         self.on_speech_state = on_speech_state
         self.voice_id = voice_id
         self.voice_style = voice_style
+        self.neural_model_path = neural_model_path
+        self.neural_voices_path = neural_voices_path
+        self.neural_engine = None
+        self.neural_tokenizer = None
+        self.neural_voices = None
+        self.neural_voice_id = ""
         self.engine_lock = threading.RLock()
         if enabled:
             try:
                 import pyttsx3  # type: ignore
                 self.engine = pyttsx3.init()
-                self.set_voice(voice_id, voice_style)
             except Exception as exc:
                 print(f"[voice output unavailable: {exc}]", file=sys.stderr)
-                self.enabled = False
+        self.set_voice(voice_id, voice_style)
+        self.set_neural_voice(neural_voice_id)
 
     def set_voice(self, voice_id: str = "", voice_style: str = "Balanced") -> None:
-        """Apply an installed OS voice and a local speaking-rate profile."""
+        """Apply an installed OS voice and a local speaking-style profile."""
         from voices import VOICE_STYLES
         self.voice_id = voice_id
         self.voice_style = voice_style if voice_style in VOICE_STYLES else "Balanced"
         if self.engine is None:
+            self.enabled = bool(self.neural_voice_id and self.neural_model_path and self.neural_voices_path)
             return
         with self.engine_lock:
             if voice_id:
@@ -104,6 +113,19 @@ class SpeechOutput:
             profile = VOICE_STYLES[self.voice_style]
             self.engine.setProperty("rate", profile["rate"])
             self.engine.setProperty("volume", profile["volume"])
+            self.enabled = True
+
+    def set_neural_voice(self, voice_id: str = "") -> None:
+        """Select an installed or downloaded local neural voice."""
+        ready = bool(
+            voice_id and self.neural_model_path and self.neural_voices_path
+            and self.neural_model_path.is_file() and self.neural_voices_path.is_file()
+        )
+        self.neural_voice_id = voice_id if ready else ""
+        self.neural_engine = None
+        self.neural_tokenizer = None
+        self.neural_voices = None
+        self.enabled = bool(self.engine is not None or self.neural_voice_id)
 
     def say(self, text: str) -> None:
         print(f"JARVIS: {text}")
@@ -112,7 +134,71 @@ class SpeechOutput:
                 self.on_speak(text)
             except Exception:
                 pass
-        if self.engine is not None:
+        if self.neural_voice_id and self.enabled:
+            with self.engine_lock:
+                try:
+                    if self.on_speech_state:
+                        self.on_speech_state(True)
+                    if self.neural_engine is None:
+                        import json
+                        import onnxruntime as ort  # type: ignore
+                        from ttstokenizer import IPATokenizer  # type: ignore
+                        self.neural_engine = ort.InferenceSession(
+                            str(self.neural_model_path), providers=["CPUExecutionProvider"]
+                        )
+                        self.neural_tokenizer = IPATokenizer()
+                        self.neural_voices = json.loads(
+                            self.neural_voices_path.read_text(encoding="utf-8")
+                        )
+                    from voices import VOICE_STYLES
+                    import sounddevice as sd  # type: ignore
+                    import numpy as np  # type: ignore
+                    import re
+                    speed = {"Calm": 0.90, "Balanced": 1.0,
+                             "Energetic": 1.10, "Concise": 1.06}[self.voice_style]
+                    speaker = np.asarray(self.neural_voices[self.neural_voice_id], dtype=np.float32)
+                    chunks: list[str] = []
+                    current = ""
+                    for sentence in re.split(r"(?<=[.!?])\s+", text.strip()):
+                        for word in sentence.split():
+                            if len(current) + len(word) + 1 > 200:
+                                if current:
+                                    chunks.append(current)
+                                current = word
+                            else:
+                                current = f"{current} {word}".strip()
+                    if current:
+                        chunks.append(current)
+                    for chunk in chunks:
+                        phonemes = np.asarray(self.neural_tokenizer(chunk), dtype=np.int64).reshape(-1)[:500]
+                        if not phonemes.size:
+                            continue
+                        tokens = np.asarray([[0, *phonemes.tolist(), 0]], dtype=np.int64)
+                        style = speaker[min(int(phonemes.size), len(speaker) - 1)]
+                        audio = self.neural_engine.run(None, {
+                            "tokens": tokens,
+                            "style": style,
+                            "speed": np.asarray([speed], dtype=np.float32),
+                        })[0]
+                        audio = np.asarray(audio, dtype=np.float32).reshape(-1)
+                        audio *= VOICE_STYLES[self.voice_style]["volume"]
+                        sd.play(audio, samplerate=24000)
+                        sd.wait()
+                except Exception as exc:
+                    print(f"[local neural voice error: {exc}]", file=sys.stderr)
+                    if self.engine is not None:
+                        try:
+                            self.engine.say(text)
+                            self.engine.runAndWait()
+                        except Exception as fallback_exc:
+                            print(f"[system speech fallback error: {fallback_exc}]", file=sys.stderr)
+                finally:
+                    if self.on_speech_state:
+                        try:
+                            self.on_speech_state(False)
+                        except Exception:
+                            pass
+        elif self.engine is not None and self.enabled:
             with self.engine_lock:
                 try:
                     if self.on_speech_state:
